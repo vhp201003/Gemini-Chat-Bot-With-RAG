@@ -1,0 +1,15 @@
+data_input:
+  path: ./data/
+
+qdrant:
+  host: http://localhost:6333
+  collection_name: "text_embeddings"
+  threshold: 0.5
+  max_results: 10
+
+embedding_model:
+  name: dangvantuan/vietnamese-document-embedding
+  vector_size: 768
+
+gemini:
+  api_key: ...

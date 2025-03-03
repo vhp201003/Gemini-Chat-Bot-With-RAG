@@ -1,0 +1,7 @@
+qdrant-client
+transformers
+sentence-transformers
+torch
+fastapi
+uvicorn
+pyyaml
