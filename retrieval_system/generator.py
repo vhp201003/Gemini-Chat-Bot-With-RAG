@@ -1,39 +1,36 @@
 import google.generativeai as genai
 import yaml
+import os
 
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "../config/config.yaml")
+
+# Load config
+with open(CONFIG_PATH, "r", encoding="utf-8") as file:
+    config = yaml.safe_load(file)
 # Tải cấu hình từ tệp config.yaml
-with open(r"../config.yaml", "r", encoding="utf-8") as file:
+with open(CONFIG_PATH, "r", encoding="utf-8") as file:
     config = yaml.safe_load(file)
 
 # Thiết lập API key cho Google Gemini
 genai.configure(api_key=config["gemini"]["api_key"])
 
 # Khởi tạo model Gemini
-model = genai.GenerativeModel('gemini-2.0-flash')
+model = genai.GenerativeModel(config["gemini"]["model"])
 
 # System prompt hướng dẫn Gemini
 SYSTEM_PROMPT = """
-Bạn là một trợ lý AI chuyên nghiệp. Trả lời theo đúng format sau:
-
-Xin chào,  
-Cảm ơn anh/chị đã có câu hỏi về chủ đề {chủ đề}.  
-Câu trả lời của tôi là:  
-
-<Trả lời ngắn gọn nội dung chính, có thể kèm LaTeX nếu cần để diễn đạt công thức toán học hoặc ký hiệu khoa học>  
-
-Nếu cần thêm thông tin, anh/chị có thể đặt câu hỏi tiếp theo.
+Bạn là một trợ lý AI chuyên nghiệp. 
+Nếu có thông tin cần thiết, vui lòng cung cấp một câu trả lời rõ ràng.
+Nếu không có dữ liệu phù hợp, hãy phản hồi rằng không có đủ thông tin.
 """
 
-def generate_response(context, query, topic="chủ đề chung"):
+def generate_response(context, query):
     """Sinh phản hồi từ Gemini với format cố định"""
     if not context:
         return "Xin lỗi, tôi không có thông tin để trả lời câu hỏi này."
 
-    # Chèn chủ đề vào system prompt
-    formatted_system_prompt = SYSTEM_PROMPT.replace("{chủ đề}", topic)
-
     # Tạo prompt với format yêu cầu
-    prompt = f"{formatted_system_prompt}\n\nThông tin có sẵn:\n{context}\n\nCâu hỏi: {query}\nTrả lời theo format trên:"
+    prompt = f"{SYSTEM_PROMPT}\n\nThông tin có sẵn:\n{context}\n\nCâu hỏi: {query}\nTrả lời ngắn gọn:"
 
     try:
         response = model.generate_content(prompt)

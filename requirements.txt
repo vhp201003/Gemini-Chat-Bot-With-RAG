@@ -1,7 +1,12 @@
-qdrant-client
+qdrant-client==1.6.4
 transformers
 sentence-transformers
 torch
-fastapi
-uvicorn
-pyyaml
+fastapi==0.104.1
+uvicorn==0.23.2
+pyyaml==6.0.1
+pydantic==2.4.2
+python-multipart==0.0.6
+google-generativeai==0.3.1
+pdfplumber
+python-docx

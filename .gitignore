@@ -1,1 +1,3 @@
-*.yaml
+# config.yaml
+*.pyc
+qdrant_storage/*

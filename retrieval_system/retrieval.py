@@ -1,11 +1,15 @@
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 import yaml
+import os
+
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "../config/config.yaml")
 
 # Load config
-with open(r"../config.yaml", "r", encoding="utf-8") as file:
+with open(CONFIG_PATH, "r", encoding="utf-8") as file:
     config = yaml.safe_load(file)
 
+print(config)
 # Kết nối Qdrant
 client = QdrantClient(config["qdrant"]["host"])
 collection_name = config["qdrant"]["collection_name"]
@@ -22,7 +26,8 @@ def search_answer(query, threshold=config["qdrant"]["threshold"], max_results=co
         query_vector=query_embedding,
         limit=max_results  # Lấy nhiều kết quả thay vì chỉ 1
     )
-
+    
+    print(results)
     # Lọc các kết quả có độ tương đồng cao hơn ngưỡng
     relevant_results = [(res.score, res.payload["text"]) for res in results if res.score > threshold]
 
@@ -33,7 +38,7 @@ def search_answer(query, threshold=config["qdrant"]["threshold"], max_results=co
     # Hiển thị debug: In từng câu với điểm số tương ứng
     print("\n🔎 **Kết quả tìm kiếm trong Qdrant:**")
     for idx, (score, text) in enumerate(relevant_results, start=1):
-        print(f"Câu {idx}: 🔹 Điểm: {score:.4f}\n   📝 Context: {text}\n")
+        print(f"Câu {idx}: 🔹 Score: {score:.4f}\n   📝 Context: {text}\n")
 
     # Ghép nhiều câu thành một context duy nhất
     result = "\n".join([text for _, text in relevant_results])

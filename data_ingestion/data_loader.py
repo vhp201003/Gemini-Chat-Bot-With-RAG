@@ -3,11 +3,14 @@ from qdrant_client.models import Distance, VectorParams, PointStruct
 from sentence_transformers import SentenceTransformer
 import os
 import re
-import yaml
 import json
 import pdfplumber  # Sử dụng pdfplumber thay vì PyPDF2 để đọc PDF
 import docx
 import hashlib
+import yaml
+import os
+
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "../config/config.yaml")
 
 # Định nghĩa kích thước chunk tối đa
 CHUNK_SIZE = 200
@@ -103,7 +106,7 @@ def load_data(file_path):
         raise ValueError(f"Định dạng file không được hỗ trợ: {ext}")
 
 # Load config
-with open(r"../config.yaml", "r") as f:
+with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
 
 input_path = config['data_input']['path']

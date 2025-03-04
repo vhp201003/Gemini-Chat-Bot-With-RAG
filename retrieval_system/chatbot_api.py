@@ -1,15 +1,31 @@
-from fastapi import FastAPI
-from .retrieval import search_answer
-from .generator import generate_response
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+# from retrieval import search_answer
+# from generator import generate_response
+from retrieval_system.retrieval import search_answer
+from retrieval_system.generator import generate_response
+
 
 app = FastAPI()
 
-@app.post("/chat")
-async def chatbot(query: str):
-    retrieved_text = search_answer(query)
-    final_response = generate_response(retrieved_text)
-    return {"response": final_response}
+class ChatRequest(BaseModel):
+    query: str
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+@app.post("/chat")
+def chat(request: ChatRequest):
+    """API nhận câu hỏi và trả về câu trả lời từ chatbot."""
+    try:
+        # Tìm kiếm dữ liệu trong Qdrant
+        context = search_answer(request.query)
+        
+        # Sinh câu trả lời từ model
+        response = generate_response(context, request.query)
+        
+        return {"query": request.query, "response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi xử lý: {str(e)}")
+
+@app.get("/")
+def root():
+    return {"message": "Chatbot API đang chạy!"}

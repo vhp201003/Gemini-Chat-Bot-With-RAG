@@ -2,9 +2,9 @@ data_input:
   path: ./data/
 
 qdrant:
-  host: http://localhost:6333
+  host: http://qdrant:6333
   collection_name: "text_embeddings"
-  threshold: 0.5
+  threshold: 0.4
   max_results: 10
 
 embedding_model:
@@ -12,4 +12,5 @@ embedding_model:
   vector_size: 768
 
 gemini:
-  api_key: ...
+  api_key: ..
+  model: gemini-2.0-flash
