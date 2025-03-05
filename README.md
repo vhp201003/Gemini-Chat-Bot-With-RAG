@@ -1,4 +1,4 @@
-# Gemini-Chat-Bot-With-RAG
+# 🚀 Gemini-Chat-Bot-With-RAG
 
 ## 📌 Giới thiệu
 Đây là một chatbot sử dụng **FastAPI**, **Qdrant** làm cơ sở dữ liệu vector và **Google Gemini** để sinh phản hồi dựa trên ngữ cảnh tìm kiếm được. Hệ thống bao gồm 3 thành phần chính:
@@ -36,6 +36,16 @@ Gemini-Chat-Bot-With-RAG/
 ```
 
 ## 🛠 Cài đặt & Chạy hệ thống
+
+### 🔑 **Thiết lập API Key cho Google Gemini**
+Trước khi chạy hệ thống, bạn cần **lấy API Key từ Google Gemini** tại [đây](https://aistudio.google.com/app/apikey?hl=vi) và thêm vào tệp `config/config.yaml`:
+
+```yaml
+gemini:
+  api_key: "YOUR_API_KEY_HERE"
+  model: "gemini-2.0-flash"
+```
+
 ### 1️⃣ **Chạy trên Local**
 ```sh
 # Cài đặt thư viện cần thiết
