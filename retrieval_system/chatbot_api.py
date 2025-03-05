@@ -1,8 +1,5 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-
-# from retrieval import search_answer
-# from generator import generate_response
 from retrieval_system.retrieval import search_answer
 from retrieval_system.generator import generate_response
 
@@ -12,7 +9,7 @@ app = FastAPI()
 class ChatRequest(BaseModel):
     query: str
 
-@app.post("/chat")
+@app.post("/query")
 def chat(request: ChatRequest):
     """API nhận câu hỏi và trả về câu trả lời từ chatbot."""
     try:
