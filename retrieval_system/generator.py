@@ -30,8 +30,10 @@ def generate_response(context, query):
         return "Xin lỗi, tôi không có thông tin để trả lời câu hỏi này."
 
     # Tạo prompt với format yêu cầu
-    prompt = f"{SYSTEM_PROMPT}\n\nThông tin có sẵn:\n{context}\n\nCâu hỏi: {query}\nTrả lời ngắn gọn:"
+    prompt = f"{SYSTEM_PROMPT}\n\nDựa vào các thông tin sau:\n{context}\n\nHãy trả lời câu hỏi sau: \n Câu hỏi: {query}"
 
+    print("\n\n 🚀 **Prompt cho Gemini:**")
+    print(prompt)
     try:
         response = model.generate_content(prompt)
         return response.text.strip()

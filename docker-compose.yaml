@@ -4,41 +4,45 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     container_name: qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
+    networks:
+      - backend
     volumes:
       - ./qdrant_storage:/qdrant/storage
+
+  data_loader:
+    build: .
+    container_name: data_loader
+    depends_on:
+      - qdrant  # Chỉ đợi Qdrant khởi động xong, không kiểm tra healthcheck
+    networks:
+      - backend
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    environment:
+      - DOCKERIZED=true
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    command: ["python", "data_ingestion/data_loader.py"]
 
   chatbot_api:
     build: .
     container_name: chatbot_api
     depends_on:
       - qdrant
-      - data_loader  # Đảm bảo dữ liệu đã nạp trước khi chạy API
+      - data_loader
+    networks:
+      - backend
     ports:
       - "8000:8000"
     volumes:
       - .:/app
-      - ./config/config.yaml:/app/config/config.yaml
     environment:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
+      - DOCKERIZED=true
     command: ["uvicorn", "retrieval_system.chatbot_api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
-  data_loader:
-    build: .
-    container_name: data_loader
-    depends_on:
-      - qdrant
-    volumes:
-      - .:/app
-      - ./data_ingestion/data:/app/data
-    environment:
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-    command: ["python", "data_ingestion/data_loader.py"]
-    restart: "no"  # Chạy một lần rồi dừng
-
-volumes:
-  qdrant_storage:
+networks:
+  backend:
+    driver: bridge

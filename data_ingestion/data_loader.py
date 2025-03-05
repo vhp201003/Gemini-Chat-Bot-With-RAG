@@ -1,21 +1,22 @@
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
-from sentence_transformers import SentenceTransformer
 import os
 import re
 import json
-import pdfplumber  # Sử dụng pdfplumber thay vì PyPDF2 để đọc PDF
+import pdfplumber
 import docx
-import hashlib
 import yaml
-import os
+from google import genai
+from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "../config/config.yaml")
 
 # Định nghĩa kích thước chunk tối đa
 CHUNK_SIZE = 200
+BATCH_SIZE = 10  # Kích thước batch
+MAX_WORKERS = 5  # Số luồng tối đa
 
-# Hàm chunking thông minh
 global_id_counter = 1  # Bắt đầu từ 1
 
 def generate_sequential_id():
@@ -25,42 +26,34 @@ def generate_sequential_id():
     global_id_counter += 1
     return unique_id
 
-
 def chunk_text(text, chunk_size=CHUNK_SIZE):
     chunks = []
     while len(text) > chunk_size:
-        # Tìm dấu câu gần nhất (".", "!", "?", "\n") để cắt
         match = re.search(r'([.!?\n])\s', text[:chunk_size][::-1])
         if match:
             last_period_index = chunk_size - match.start() - 1
         else:
-            # Nếu không tìm thấy dấu câu, tìm khoảng trắng gần nhất để cắt
             space_index = text[:chunk_size].rfind(' ')
             last_period_index = space_index if space_index != -1 else chunk_size
         
-        chunks.append(text[:last_period_index].strip())  # Cắt chunk
-        text = text[last_period_index+1:].lstrip()  # Cập nhật phần còn lại
+        chunks.append(text[:last_period_index].strip())
+        text = text[last_period_index+1:].lstrip()
     
-    chunks.append(text.strip())  # Thêm phần còn lại của văn bản
+    chunks.append(text.strip())
     return chunks
 
-# Hàm chuẩn hóa văn bản (loại bỏ khoảng trắng dư thừa, xử lý từ bị tách)
 def clean_text(text):
-    text = re.sub(r'\s+', ' ', text)  # Thay thế nhiều khoảng trắng bằng 1 khoảng trắng
-    text = re.sub(r'(?<=\w)- (?=\w)', '', text)  # Xử lý từ bị tách ở cuối dòng
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'(?<=\w)- (?=\w)', '', text)
     text = text.lower()
     return text.strip()
 
-# Hàm đọc file JSON
 def load_json(file_path):
-    global global_id_counter
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    filename = os.path.basename(file_path)
-    return [{"id": generate_sequential_id(), "text": chunk} for idx, item in enumerate(data) for chunk in chunk_text(item["text"])]
+    return [{"id": generate_sequential_id(), "text": chunk} for item in data for chunk in chunk_text(item["text"])]
 
 def load_pdf(file_path):
-    global global_id_counter
     text = ""
     with pdfplumber.open(file_path) as pdf:
         for page in pdf.pages:
@@ -68,18 +61,14 @@ def load_pdf(file_path):
             if extracted_text:
                 text += extracted_text + "\n"
     text = clean_text(text)
-    filename = os.path.basename(file_path)
-    return [{"id": generate_sequential_id(), "text": chunk} for idx, chunk in enumerate(chunk_text(text))]
+    return [{"id": generate_sequential_id(), "text": chunk} for chunk in chunk_text(text)]
 
 def load_docx(file_path):
-    global global_id_counter
     doc = docx.Document(file_path)
     text = "\n".join([para.text for para in doc.paragraphs])
     text = clean_text(text)
-    filename = os.path.basename(file_path)
-    return [{"id": generate_sequential_id(), "text": chunk} for idx, chunk in enumerate(chunk_text(text))]
+    return [{"id": generate_sequential_id(), "text": chunk} for chunk in chunk_text(text)]
 
-# Hàm đọc toàn bộ file trong thư mục
 def load_all_files(directory_path):
     all_data = []
     for file_name in os.listdir(directory_path):
@@ -87,13 +76,11 @@ def load_all_files(directory_path):
         if os.path.isfile(file_path):
             try:
                 data = load_data(file_path)
-                print(data, sep = "\n")
                 all_data.extend(data)
             except Exception as e:
                 print(f"Lỗi khi xử lý file {file_path}: {e}")
     return all_data
 
-# Xác định loại file và tải dữ liệu
 def load_data(file_path):
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".json":
@@ -105,33 +92,77 @@ def load_data(file_path):
     else:
         raise ValueError(f"Định dạng file không được hỗ trợ: {ext}")
 
+def get_embedding(text):
+    """Giữ nguyên model embedding theo yêu cầu"""
+    client = genai.Client(api_key=config["gemini"]["api_key"])
+    result = client.models.embed_content(
+        model=embedding_model_name,
+        contents=text
+    )
+    return list(map(float, result.embeddings[0].values))
+
 # Load config
 with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
 
-input_path = config['data_input']['path']
+# Kiểm tra nếu đang chạy trong Docker
+RUNNING_IN_DOCKER = os.getenv("DOCKERIZED", "false").lower() == "true"
 
-# Load dữ liệu từ tất cả các file trong thư mục
+# Chọn host phù hợp
+if RUNNING_IN_DOCKER:
+    config["qdrant"]["host"] = "http://qdrant:6333"  # Dùng trong Docker
+else:
+    config["qdrant"]["host"] = "http://localhost:6333"  # Dùng trong Local
+
+embedding_model_name = config["embedding_model"]["name"]
+
+input_path = config['data_input']['path']
 datas = load_all_files(input_path)
 
-# Kết nối Qdrant
 client = QdrantClient(config["qdrant"]["host"])
 collection_name = config["qdrant"]["collection_name"]
 
-# Load model embedding
-embedding_model = SentenceTransformer(config["embedding_model"]["name"], trust_remote_code=True)
-
-# Tạo collection nếu chưa có
 client.recreate_collection(
     collection_name=collection_name,
     vectors_config=VectorParams(size=config["embedding_model"]["vector_size"], distance=Distance.COSINE),
 )
+print("Đã tạo collection mới trong Qdrant.")
 
-# Chuyển văn bản thành vector và lưu vào Qdrant
-points = [
-    PointStruct(id=item["id"], vector=embedding_model.encode(item["text"]).tolist(), payload=item)
-    for item in datas
-]
+# 🚀 **Sử dụng đa luồng để xử lý embedding song song**
+points = []
 
-client.upsert(collection_name=collection_name, points=points)
-print("Dữ liệu đã được lưu vào Qdrant.")
+def process_item(item):
+    """Xử lý embedding cho một item"""
+    try:
+        embedding = get_embedding(item["text"])
+        return PointStruct(id=item["id"], vector=embedding, payload=item)
+    except Exception as e:
+        print(f"Lỗi khi xử lý embedding: {e}")
+        return None  # Trả về None nếu có lỗi
+
+# Dùng ThreadPoolExecutor để tăng tốc độ xử lý
+with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    futures = {executor.submit(process_item, item): item for item in datas}
+
+    for future in tqdm(as_completed(futures), total=len(futures), desc="Embedding dữ liệu"):
+        result = future.result()
+        if result:
+            points.append(result)
+
+# 🚀 **Upsert dữ liệu vào Qdrant theo batch**
+if points:
+    for i in tqdm(range(0, len(points), 100), desc="Upsert dữ liệu vào Qdrant"):
+        batch = points[i:i + 100]
+        client.upsert(collection_name=collection_name, points=batch)
+    print("Dữ liệu đã được lưu vào Qdrant.")
+else:
+    print("Không có dữ liệu để upsert vào Qdrant.")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FLAG_FILE = os.path.join(BASE_DIR, "data_loader_done.flag")
+
+# ✅ Sau khi hoàn tất nạp dữ liệu vào Qdrant, tạo file flag
+with open(FLAG_FILE, "w") as f:
+    f.write("done")
+
+print(f"✅ Data loading hoàn tất! Flag file được tạo tại: {FLAG_FILE}")
